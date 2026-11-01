@@ -2,7 +2,32 @@
 
 A study planner built for students with ADHD. It puts tasks, habits, a calendar, a Pomodoro study room and a distraction blocker in one place, plus a short self-screening quiz with AI help for confusing questions.
 
-**Live API:** https://adhd-fudz.onrender.com
+**Live demo:** https://adhd-study-planner.onrender.com
+(hosted on Render's free plan, so the first load can take up to a minute while the server wakes up)
+
+## Screenshots
+
+### Dashboard
+Tasks, completed tasks and daily habit progress at a glance.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Calendar
+Week view of tasks and habits, with the task list beside it.
+
+![Calendar](docs/screenshots/calendar.png)
+
+### Study mode
+Pomodoro timer over a calm animated background, with music and a task list.
+
+![Study mode](docs/screenshots/study-mode.jpg)
+
+### ADHD self-screener
+An 18-question check based on the adult ADHD self-report scale.
+
+![ADHD self-screener](docs/screenshots/detector.png)
+
+<sub>Screenshots use sample data.</sub>
 
 ## Features
 
