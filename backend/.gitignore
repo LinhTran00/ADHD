@@ -31,3 +31,5 @@ build/
 # OS-specific files
 Thumbs.db
 ehthumbs.db
+# Secrets
+config.json
