@@ -1,15 +1,14 @@
 require("dotenv").config();
 
-const config = require("./config.json");
 const mongoose = require("mongoose");
 
-const connectionString = config.connectionString.replace(
-  "<testuser123>",
-  process.env.DB_PASSWORD
-);
+if (!process.env.MONGODB_URI) {
+  console.error("Missing MONGODB_URI. Copy .env.example to .env and fill it in.");
+  process.exit(1);
+}
 
 mongoose
-  .connect(connectionString)
+  .connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
 
@@ -22,7 +21,33 @@ const cors = require("cors");
 const app = express();
 
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 const { authenticateToken } = require("./utilities");
+
+const SALT_ROUNDS = 10;
+
+// One place that decides what goes inside a token, so signup and login
+// always produce the same shape: req.user = { user: { _id, fullName, email } }.
+// Never put the password hash in the token.
+const signToken = (userDoc) =>
+  jwt.sign(
+    {
+      user: {
+        _id: userDoc._id.toString(),
+        fullName: userDoc.fullName,
+        email: userDoc.email,
+      },
+    },
+    process.env.ACCESS_TOKEN_SECRET,
+    { expiresIn: "36000m" }
+  );
+
+const publicUser = (userDoc) => ({
+  _id: userDoc._id,
+  fullName: userDoc.fullName,
+  email: userDoc.email,
+  createOn: userDoc.createOn,
+});
 
 const validateHabitInput = (req, res, next) => {
   const { notify } = req.body;
@@ -39,16 +64,24 @@ const validateHabitInput = (req, res, next) => {
   next();
 };
 
+// CORS has to come before the routers, or preflight requests to them fail.
+app.use(
+  cors({
+    origin: process.env.CLIENT_ORIGIN
+      ? process.env.CLIENT_ORIGIN.split(",").map((o) => o.trim())
+      : "*",
+  })
+);
 app.use(express.json());
 
 const notification = require("./notification");
 app.use("/notification", notification);
 
-app.use(
-  cors({
-    origin: "*",
-  })
-);
+const ai = require("./ai");
+app.use("/ai", ai);
+
+// Hourly email reminders for tasks due within the next hour
+require("./scheduler/reminderCron");
 
 app.get("/", (req, res) => {
   res.json({ data: "hello world!" });
@@ -80,16 +113,15 @@ app.post("/create-account", async (req, res) => {
     return res.json({ error: true, message: "User already exists." });
   }
 
-  const user = new User({ fullName, email, password });
+  const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+  const user = new User({ fullName, email, password: hashedPassword });
   await user.save();
 
-  const accessToken = jwt.sign({ user }, process.env.ACCESS_TOKEN_SECRET, {
-    expiresIn: "36000m",
-  });
+  const accessToken = signToken(user);
 
   return res.json({
     error: false,
-    user,
+    user: publicUser(user),
     accessToken,
     message: "Successful Registration!",
   });
@@ -112,11 +144,19 @@ app.post("/login", async (req, res) => {
     return res.status(400).json({ message: "User does not exist" });
   }
 
-  if (userInfo.email == email && userInfo.password == password) {
-    const user = { user: userInfo };
-    const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-      expiresIn: "36000m",
-    });
+  // Accounts made before hashing was added still hold a plain-text password.
+  // Accept it once, then upgrade it to a bcrypt hash.
+  const isHashed = /^\$2[aby]\$/.test(userInfo.password || "");
+  const passwordOk = isHashed
+    ? await bcrypt.compare(password, userInfo.password)
+    : userInfo.password === password;
+
+  if (passwordOk) {
+    if (!isHashed) {
+      userInfo.password = await bcrypt.hash(password, SALT_ROUNDS);
+      await userInfo.save();
+    }
+    const accessToken = signToken(userInfo);
     return res.json({
       error: false,
       message: "Login Successful",
@@ -140,12 +180,7 @@ app.get("/get-user", authenticateToken, async (req, res) => {
     return res.status(401).json({ error: true, message: "User not found" });
   }
   return res.json({
-    user: {
-      fullName: isUser.fullName,
-      email: isUser.email,
-      _id: isUser._id,
-      createOn: isUser.createOn,
-    },
+    user: publicUser(isUser),
     message: "",
   });
 });
@@ -212,7 +247,11 @@ app.put("/edit-task/:taskId", authenticateToken, async (req, res) => {
     if (tags) task.tags = tags;
     if (isPinned !== undefined) task.isPinned = isPinned;
     if (isCompleted !== undefined) task.isCompleted = isCompleted; // Ensure isCompleted is handled
-    if (dueDate !== undefined) task.dueDate = dueDate; // Add this line to update dueDate
+    if (dueDate !== undefined) {
+      // A new due date needs a new reminder
+      if (String(dueDate) !== String(task.dueDate)) task.reminderSent = false;
+      task.dueDate = dueDate;
+    }
 
     await task.save();
 

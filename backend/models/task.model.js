@@ -11,6 +11,7 @@ const taskSchema = new Schema({
   isCompleted: { type: Boolean, default: false },
   createdOn: { type: Date, default: new Date().getTime() },
   dueDate: { type: Date, required: false },
+  reminderSent: { type: Boolean, default: false },
 });
 
 module.exports = mongoose.model("Task", taskSchema);

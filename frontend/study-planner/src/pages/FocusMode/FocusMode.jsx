@@ -1,18 +1,18 @@
+/* global chrome */
 import React, { useState, useEffect } from 'react';
+import { EXTENSION_ID } from '../../utils/constants';
 
 const FocusMode = () => {
     const [isFocusModeEnabled, setIsFocusModeEnabled] = useState(false);
 
-    const EXTENSION_ID = "kilbgoalbeoffipibcgnmfigjkhcdhkn"; 
-
     // Check the current state of Focus Mode when the component loads
     useEffect(() => {
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-            chrome.storage.local.get(["focusModeEnabled"], (result) => {
-                setIsFocusModeEnabled(result.focusModeEnabled || false);
+        // Web pages can't read chrome.storage, so ask the extension itself
+        if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+            chrome.runtime.sendMessage(EXTENSION_ID, { getStatus: true }, (response) => {
+                if (chrome.runtime.lastError) return; // extension not installed
+                setIsFocusModeEnabled(Boolean(response?.enabled));
             });
-        } else {
-            console.warn("Chrome storage API is not available.");
         }
     }, []);
 
@@ -31,9 +31,6 @@ const FocusMode = () => {
                     } else {
                         console.log(response?.status || "No response from background script.");
                         setIsFocusModeEnabled(newStatus);
-                        if (chrome.storage && chrome.storage.local) {
-                            chrome.storage.local.set({ focusModeEnabled: newStatus }); // Store state in Chrome storage
-                        }
                     }
                 }
             );

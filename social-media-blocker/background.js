@@ -35,9 +35,15 @@ const blockedSites = [
   
   // Listener for React messages
   chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
-    if (message.block !== undefined) {
+    if (message.getStatus) {
+      // Let the web app show the right toggle state on page load
+      chrome.storage.local.get(["focusModeEnabled"], (result) => {
+        sendResponse({ enabled: Boolean(result.focusModeEnabled) });
+      });
+    } else if (message.block !== undefined) {
       console.log(`Focus Mode status: ${message.block ? "Enabled" : "Disabled"}`);
       updateRules(message.block); // Enable or disable blocking rules
+      chrome.storage.local.set({ focusModeEnabled: Boolean(message.block) });
       sendResponse({ status: "Focus Mode updated successfully." });
     } else {
       sendResponse({ status: "Invalid message." });

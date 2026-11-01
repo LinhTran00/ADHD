@@ -1,7 +1,6 @@
 import axios from "axios";
 import { BASE_URL } from "./constants";
 
-console.log("BASE_URL:", BASE_URL); // Log the BASE_URL value
 
 // Create an Axios instance with default settings
 const axiosInstance = axios.create({
